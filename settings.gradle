@@ -7,3 +7,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "TrackLogPlugin"
 include ':app'
+include ':tracklog-core'
