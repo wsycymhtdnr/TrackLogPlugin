@@ -8,4 +8,4 @@ package com.xiaoan.tracklog.annotation
  */
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.BINARY)
-annotation class TrackEvent(val value: String, val filters: IntArray)
+annotation class TrackEvent(val name: String, val filters: IntArray = [])
