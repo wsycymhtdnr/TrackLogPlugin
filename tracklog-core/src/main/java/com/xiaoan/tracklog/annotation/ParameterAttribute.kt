@@ -6,5 +6,5 @@ package com.xiaoan.tracklog.annotation
  * @Date 2022/4/9 16:17
  */
 @Target(AnnotationTarget.VALUE_PARAMETER)
-@Retention(AnnotationRetention.BINARY)
+@Retention(AnnotationRetention.RUNTIME)
 annotation class ParameterAttribute(val key: String)

@@ -4,10 +4,6 @@ plugins {
     id 'track-log-plugin'
 }
 
-TrackLogExt {
-    eventNumber 20
-}
-
 android {
     compileSdk 32
 
@@ -34,6 +30,10 @@ android {
     kotlinOptions {
         jvmTarget = '1.8'
     }
+}
+
+TrackLogExt {
+    eventSize 20
 }
 
 dependencies {

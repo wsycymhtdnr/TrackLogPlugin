@@ -6,5 +6,5 @@ package com.xiaoan.tracklog.runtime
  * @Date 2022/4/10 23:12
  */
 interface EventSubscriber {
-    fun onEventTracked(event: Event?)
+    fun onEventTracked(event: Event)
 }

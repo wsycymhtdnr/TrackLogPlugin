@@ -7,15 +7,17 @@ import com.xiaoan.tracklog.annotation.TrackEvent
  * @Description TrackLog入口类
  * @Date 2022/4/10 23:12
  */
-class TrackLog private constructor(var eventSubscriber: EventSubscriber) : TrackLogListener {
+object TrackLog : TrackLogListener {
     private val sharedAttributes = mutableMapOf<String, Any>()
     private lateinit var logger: EventLogListener
+    private lateinit var eventSubscriber: EventSubscriber
 
     fun init(eventSubscriber: EventSubscriber): TrackLog {
-        val trackLog = TrackLog(eventSubscriber)
         TrackLogManager.subscribe(this)
-        return trackLog
+        this.eventSubscriber = eventSubscriber
+        return this
     }
+
 
     fun setEventLogListener(logger: EventLogListener) {
         this.logger = logger

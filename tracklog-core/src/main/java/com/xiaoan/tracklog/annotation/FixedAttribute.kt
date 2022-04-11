@@ -7,5 +7,5 @@ package com.xiaoan.tracklog.annotation
  */
 @Repeatable
 @Target(AnnotationTarget.FUNCTION,AnnotationTarget.CLASS)
-@Retention(AnnotationRetention.BINARY)
+@Retention(AnnotationRetention.RUNTIME)
 annotation class FixedAttribute(val key: String, val value: String)

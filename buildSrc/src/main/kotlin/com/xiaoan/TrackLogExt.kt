@@ -5,5 +5,5 @@ package com.xiaoan
  */
 open class TrackLogExt {
     // 多少个事件发送一次数据
-    var eventNumber: Int = 1
+    var eventSize: Int = 1
 }
