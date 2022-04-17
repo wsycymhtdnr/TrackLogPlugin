@@ -1,11 +1,11 @@
 package com.example.tracklog
 
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
-import android.view.View
 import android.widget.TextView
-import com.xiaoan.tracklog.annotation.FixedAttribute
+import androidx.appcompat.app.AppCompatActivity
+import com.xiaoan.tracklog.annotation.LocalVariableAttribute
+import com.xiaoan.tracklog.annotation.ParameterAttribute
 import com.xiaoan.tracklog.annotation.ReturnAttribute
 import com.xiaoan.tracklog.annotation.TrackEvent
 import com.xiaoan.tracklog.runtime.*
@@ -19,11 +19,11 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        val textview = findViewById<TextView>(R.id.textview).apply {
-            setOnClickListener {
-                test()
-            }
+    findViewById<TextView>(R.id.textview).apply {
+        setOnClickListener {
+            test("add")
         }
+    }
         TrackLog.init(object : EventSubscriber{
             override fun onEventTracked(event: Event) {
 
@@ -36,7 +36,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     @TrackEvent("MainActivity")
-    fun test() {
+    @ReturnAttribute("ReturnAttribute")
+    fun test(@ParameterAttribute("add") add: String) {
+        @LocalVariableAttribute("localVar")
+        val string = "test"
+        Log.d("lyf", string)
+        InterningExample.example()
         TrackLogManager.sendEvent(this.javaClass.getAnnotation(TrackEvent::class.java)!!, mutableMapOf());
     }
+
 }

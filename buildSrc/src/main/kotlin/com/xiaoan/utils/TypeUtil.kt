@@ -1,20 +1,9 @@
 package com.xiaoan.utils
 
-import com.xiaoan.asm.WeaveSingleClass
-import com.xiaoan.utils.TypeUtil.isMatchCondition
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
-import java.io.ByteArrayInputStream
-import java.io.File
-import java.nio.file.Files
-import java.util.zip.ZipEntry
-import java.util.zip.ZipFile
-import java.util.zip.ZipOutputStream
-
 /**
  * 类型判断工具类，用来区分是否是某个特定的类型
  *
- * @author ArgusAPM Team
+ * @author liyunfei
  */
 object TypeUtil {
 

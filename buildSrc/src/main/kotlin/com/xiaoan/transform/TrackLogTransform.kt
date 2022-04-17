@@ -5,6 +5,7 @@ import com.android.build.api.transform.QualifiedContent
 import com.android.build.api.transform.Transform
 import com.android.build.api.transform.TransformInvocation
 import com.android.build.gradle.internal.pipeline.TransformManager
+import com.xiaoan.extension.TrackLogConfigExt
 import com.xiaoan.asm.WeaveSingleClass
 import com.xiaoan.utils.TypeUtil
 import com.xiaoan.utils.eachFileRecurse
@@ -17,7 +18,13 @@ import java.util.jar.JarFile
 import java.util.jar.JarOutputStream
 import java.util.zip.ZipEntry
 
-class TrackLogTransform : Transform() {
+/**
+ * @Author liyunfei
+ * @Description 访问类的注解信息, 会将类注解的参数传入到类的所有带@TrackEvent注解的方法中
+ * @Date 2022/4/11 15:52
+ * @property config 参数配置
+ */
+class TrackLogTransform(private val config: TrackLogConfigExt) : Transform() {
     override fun getName(): String {
         return "TrackLogTransform"
     }
@@ -42,10 +49,7 @@ class TrackLogTransform : Transform() {
             transformInvocation.outputProvider.deleteAll()
         }
 
-
         transformInvocation.inputs.forEach { input ->
-
-
             input.directoryInputs.forEach { dirInput ->
                 //处理完输入文件之后，要把输出给下一个任务,就是在：transforms\ScannerComponentTransformKt\debug\0目录中
                 // name就是会在__content__.json文件中的name，唯一的,随便取，但是一定要保证唯一
@@ -58,7 +62,7 @@ class TrackLogTransform : Transform() {
                         val outputFile = File(file.absolutePath.replace(dirInput.file.absolutePath, dest.absolutePath))
                         FileUtils.touch(outputFile)
                         val inputStream = FileInputStream(file)
-                        val bytes = WeaveSingleClass.weaveTrackLog(inputStream)//需要织入代码
+                        val bytes = WeaveSingleClass.weaveTrackLog(config, inputStream)//需要织入代码
                         val fos = FileOutputStream(outputFile)
                         fos.write(bytes)
                         fos.close()
@@ -90,7 +94,7 @@ class TrackLogTransform : Transform() {
                         //插桩class
                         if (TypeUtil.isMatchCondition(entryName)) {
                             tmpJarOutputStream.putNextEntry(zipEntry)
-                            val updateCodeBytes = WeaveSingleClass.weaveTrackLog(inputStream)
+                            val updateCodeBytes = WeaveSingleClass.weaveTrackLog(config, inputStream)
                             tmpJarOutputStream.write(updateCodeBytes)
                         } else {
 //                            KLogger.e("不满足条件Jar文件中${entryName}文件")
