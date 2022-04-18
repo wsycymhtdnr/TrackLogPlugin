@@ -5,6 +5,7 @@ import android.util.Log
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.xiaoan.tracklog.annotation.LocalVariableAttribute
+import com.xiaoan.tracklog.annotation.LocalVariableJava
 import com.xiaoan.tracklog.annotation.ParameterAttribute
 import com.xiaoan.tracklog.annotation.ReturnAttribute
 import com.xiaoan.tracklog.annotation.TrackEvent
@@ -12,6 +13,8 @@ import com.xiaoan.tracklog.runtime.*
 
 @TrackEvent("MainActivity")
 class MainActivity : AppCompatActivity() {
+
+    private var classAttributes: MutableList<Map<String, String>> = mutableListOf()
 
 //    @ReturnAttribute(key = "test")
 //    @FixedAttribute(key = "test", value = "value")
@@ -38,8 +41,7 @@ class MainActivity : AppCompatActivity() {
     @TrackEvent("MainActivity")
     @ReturnAttribute("ReturnAttribute")
     fun test(@ParameterAttribute("add") add: String) {
-        @LocalVariableAttribute("localVar")
-        val string = "test"
+        val string  = "test"
         Log.d("lyf", string)
         InterningExample.example()
         TrackLogManager.sendEvent(this.javaClass.getAnnotation(TrackEvent::class.java)!!, mutableMapOf());

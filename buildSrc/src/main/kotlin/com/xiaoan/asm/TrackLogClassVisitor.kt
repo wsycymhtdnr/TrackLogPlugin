@@ -13,18 +13,12 @@ import org.objectweb.asm.commons.AdviceAdapter
 class TrackLogClassVisitor(classWriter: ClassWriter, private val configExt: TrackLogConfigExt) :
     ClassVisitor(Opcodes.ASM7, classWriter) {
     private lateinit var className: String
+    private var classAttributes : MutableList<Map<String, String>> = mutableListOf()
 
     // 是否含有@TraceEvent注解
     private var hasTraceEvent = false
 
-    override fun visit(
-        version: Int,
-        access: Int,
-        name: String?,
-        signature: String?,
-        superName: String?,
-        interfaces: Array<out String>?
-    ) {
+    override fun visit(version: Int, access: Int, name: String?, signature: String?, superName: String?, interfaces: Array<out String>?) {
         super.visit(version, access, name, signature, superName, interfaces)
         name?.let {
             className = name
@@ -35,19 +29,35 @@ class TrackLogClassVisitor(classWriter: ClassWriter, private val configExt: Trac
         if (descriptor == AnnotationConstants.TRACK_EVENT) {
             hasTraceEvent = true
         }
-        return super.visitAnnotation(descriptor, visible)
+        return if (hasTraceEvent) {
+            object: AnnotationVisitor(Opcodes.ASM7, super.visitAnnotation(descriptor, visible)) {
+                override fun visit(name: String?, value: Any?) {
+                    super.visit(name, value)
+                    if (name == "name") {
+                        val attribute = mapOf(Pair(name, value as String))
+                        classAttributes.add(attribute)
+                    }
+                }
+            }
+        } else {
+            super.visitAnnotation(descriptor, visible)
+        }
+
     }
 
     override fun visitMethod(
         access: Int, name: String?, descriptor: String?, signature: String?,
         exceptions: Array<out String>?
     ): MethodVisitor {
+        classAttributes.forEach {
+            println(it.keys + "--------------" + it.values)
+        }
         val methodVisitor = cv.visitMethod(access, name, descriptor, signature, exceptions)
         // 有注解才对该类进行hook
-        if (configExt.isHookClassWithTrackEventAnnotation && hasTraceEvent) {
-            return TrackLogMethodVisitor(methodVisitor, access, name, descriptor)
+        return if (configExt.isHookClassWithTrackEventAnnotation && hasTraceEvent) {
+            TrackLogMethodVisitor(classAttributes, methodVisitor, access, name, descriptor)
         } else {
-            return object : AdviceAdapter(Opcodes.ASM7, methodVisitor, access, name, descriptor) {}
+            object : AdviceAdapter(Opcodes.ASM7, methodVisitor, access, name, descriptor) {}
         }
     }
 
