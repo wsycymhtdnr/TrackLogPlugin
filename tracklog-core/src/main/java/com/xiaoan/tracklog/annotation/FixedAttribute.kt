@@ -8,4 +8,4 @@ package com.xiaoan.tracklog.annotation
 @Repeatable
 @Target(AnnotationTarget.FUNCTION,AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
-annotation class FixedAttribute(val key: String, val value: String)
+annotation class FixedAttribute(val key: String, val value: String, val shared: Boolean = false)

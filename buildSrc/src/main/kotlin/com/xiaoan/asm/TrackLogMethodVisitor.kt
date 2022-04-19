@@ -1,6 +1,7 @@
 package com.xiaoan.asm
 
 import com.xiaoan.beans.TrackEventBean
+import com.xiaoan.const.AnnotationConstants
 import com.xiaoan.const.AnnotationConstants.TRACK_EVENT
 import org.objectweb.asm.*
 import org.objectweb.asm.commons.AdviceAdapter
@@ -16,8 +17,12 @@ class TrackLogMethodVisitor(
 ) : AdviceAdapter(Opcodes.ASM7, methodVisitor, access, name, descriptor) {
     // 是否含有@TraceEvent注解
     private var hasTraceEvent = false
-    // class的@TraceEvent注解filters参数大小
+    // class的@TraceEvent注解filters参数大小,解析完方法注解后加上方法注解filters
     private var filterSize = classAttributes.filters.size
+    // class的@TraceEvent注解name,解析完方法注解后加上方法注解name
+    private var trackEventName = classAttributes.name
+    // class的@TraceEvent注解filters参数,解析完方法注解后加上方法注解filters
+    private var filters = classAttributes.filters
     // filters数组的标志符
     private var filtersId :Int = 0
 
@@ -25,32 +30,60 @@ class TrackLogMethodVisitor(
     override fun visitAnnotation(descriptor: String?, visible: Boolean): AnnotationVisitor {
         return if (descriptor == TRACK_EVENT) {
             hasTraceEvent = true
-            TrackLogMethodAnnotationVisitor(descriptor,Opcodes.ASM7, super.visitAnnotation(descriptor, visible))
+            object: AnnotationVisitor(Opcodes.ASM7, super.visitAnnotation(descriptor, visible)){
+                override fun visit(name: String?, value: Any?) {
+                    super.visit(name, value)
+                    when (descriptor) {
+                        TRACK_EVENT -> {
+                            //println("TrackLogMethodAnnotationVisitor")
+                            handleTrackEvent(name, value)
+                        }
+                        AnnotationConstants.FIXED_ATTRIBUTE -> {}
+                        AnnotationConstants.LOCAL_VARIABLE_ATTRIBUTE -> {}
+                        AnnotationConstants.PARAMETER_ATTRIBUTE -> {}
+                        AnnotationConstants.RETURN_ATTRIBUTE -> {}
+                    }
+                    super.visit(name, value)
+                }
+            }
         } else {
             super.visitAnnotation(descriptor, visible)
         }
     }
 
-    override fun visitLocalVariableAnnotation(
-        typeRef: Int, typePath: TypePath?, start: Array<out Label>?,
-        end: Array<out Label>?, index: IntArray?, descriptor: String?, visible: Boolean,
-    ): AnnotationVisitor {
-        println("$name---$descriptor---$index")
-        return TrackLogMethodLocalVarAnnotationVisitor(descriptor, Opcodes.ASM7,
-            super.visitLocalVariableAnnotation(typeRef, typePath, start, end, index, descriptor, visible))
-    }
-
-
-    override fun visitLocalVariable(
-        name: String?, descriptor: String?, signature: String?,
-        start: Label?, end: Label?, index: Int,
-    ) {
-        if (hasTraceEvent) {
-            println("$name---$descriptor---$index---$start---$end")
+    private fun handleTrackEvent(name: String?, value: Any?) {
+        when (name) {
+            "name" -> trackEventName.plus("_").plus(value.toString())
+            "filters" -> {
+                val methodFilters = value as IntArray
+                filters = filters.plus(methodFilters)
+                filterSize = filters.size
+            }
         }
-
-        super.visitLocalVariable(name, descriptor, signature, start, end, index)
     }
+
+//TODO kotlin编译器会丢弃掉局部变量注解，暂不支持
+//region
+//    override fun visitLocalVariableAnnotation(
+//        typeRef: Int, typePath: TypePath?, start: Array<out Label>?,
+//        end: Array<out Label>?, index: IntArray?, descriptor: String?, visible: Boolean,
+//    ): AnnotationVisitor {
+//        println("$name---$descriptor---$index")
+//        return TrackLogMethodLocalVarAnnotationVisitor(descriptor, Opcodes.ASM7,
+//            super.visitLocalVariableAnnotation(typeRef, typePath, start, end, index, descriptor, visible))
+//    }
+//
+//    override fun visitLocalVariable(
+//        name: String?, descriptor: String?, signature: String?,
+//        start: Label?, end: Label?, index: Int,
+//    ) {
+//        if (hasTraceEvent) {
+//            println("$name---$descriptor---$index---$start---$end")
+//        }
+//
+//        super.visitLocalVariable(name, descriptor, signature, start, end, index)
+//    }
+//endregion
 
     override fun onMethodEnter() {
         super.onMethodEnter()
@@ -66,12 +99,13 @@ class TrackLogMethodVisitor(
 
         mv.visitTypeInsn(NEW, "com/xiaoan/tracklog/beans/TrackEventBean")
         mv.visitInsn(DUP)
-        mv.visitLdcInsn(classAttributes.name)
+        mv.visitLdcInsn(trackEventName)
         mv.visitVarInsn(ALOAD, filtersId)
         mv.visitMethodInsn(INVOKESPECIAL, "com/xiaoan/tracklog/beans/TrackEventBean", "<init>", "(Ljava/lang/String;[I)V", false)
         //TODO object类型局部变量处理
         val trackEventBeanId = filtersId + 1
         mv.visitVarInsn(ASTORE, trackEventBeanId)
+
         mv.visitInsn(ICONST_0)
         mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
         mv.visitVarInsn(ALOAD, trackEventBeanId)
@@ -84,10 +118,9 @@ class TrackLogMethodVisitor(
     private fun initFilters() {
         if (filterSize == 0) return
         for(index in 0 until filterSize) {
-            println("" + index + "----" + classAttributes.filters[index])
             mv.visitInsn(DUP)
             mv.visitIntInsn(SIPUSH, index)
-            mv.visitIntInsn(SIPUSH, classAttributes.filters[index])
+            mv.visitIntInsn(SIPUSH, filters[index])
             mv.visitInsn(IASTORE)
         }
     }

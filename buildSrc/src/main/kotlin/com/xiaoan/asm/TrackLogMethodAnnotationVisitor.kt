@@ -12,6 +12,7 @@ import org.objectweb.asm.AnnotationVisitor
  * @Description: 访问埋点入口方法的注解
  * @Date: 2022-04-16 16:57
  */
+@Deprecated("")
 class TrackLogMethodAnnotationVisitor(private val descriptor: String?,
     api: Int, annotationVisitor: AnnotationVisitor?) : AnnotationVisitor(api, annotationVisitor) {
 

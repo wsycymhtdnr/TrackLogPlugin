@@ -7,4 +7,4 @@ package com.xiaoan.tracklog.annotation
  */
 @Target(AnnotationTarget.VALUE_PARAMETER)
 @Retention(AnnotationRetention.RUNTIME)
-annotation class ParameterAttribute(val key: String)
+annotation class ParameterAttribute(val key: String, val shared: Boolean = false)

@@ -35,7 +35,7 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    @TrackEvent("MainActivity")
+    @TrackEvent("test")
 //    @ReturnAttribute("ReturnAttribute")
     fun test(/*@ParameterAttribute("add") add: String*/) {
 //        val filters = intArrayOf(1, 2, 3)

@@ -1,5 +1,7 @@
 package com.xiaoan.tracklog.annotation
 
+import jdk.jfr.Description
+
 /**
  * @Author liyunfei
  * @Description 局部变量注解
@@ -7,4 +9,5 @@ package com.xiaoan.tracklog.annotation
  */
 @Target(AnnotationTarget.TYPE)
 @Retention(AnnotationRetention.RUNTIME)
+@Description("kotlin编译器会丢弃掉局部变量注解，暂不支持")
 annotation class LocalVariableAttribute(val key: String)

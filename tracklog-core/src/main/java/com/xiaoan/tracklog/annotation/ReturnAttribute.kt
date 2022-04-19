@@ -7,4 +7,4 @@ package com.xiaoan.tracklog.annotation
  */
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
-annotation class ReturnAttribute(val key: String)
+annotation class ReturnAttribute(val key: String, val shared: Boolean = false)
