@@ -1,6 +1,7 @@
 package com.xiaoan.tracklog.runtime
 
 import com.xiaoan.tracklog.annotation.TrackEvent
+import com.xiaoan.tracklog.beans.TrackEventBean
 
 /**
  * @Author liyunfei
@@ -41,7 +42,7 @@ object TrackLog : TrackLogListener {
         logger.log(builder.toString())
     }
 
-    override fun onEventTriggered(trackEvent: TrackEvent, attributes: MutableMap<String, Any>) {
+    override fun onEventTriggered(trackEvent: TrackEventBean, attributes: MutableMap<String, Any>) {
         val event = EventPool.obtain().apply {
             name = trackEvent.name
             filters = trackEvent.filters

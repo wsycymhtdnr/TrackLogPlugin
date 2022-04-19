@@ -1,5 +1,6 @@
 package com.xiaoan.asm
 
+import com.xiaoan.beans.TrackEventBean
 import com.xiaoan.const.AnnotationConstants.TRACK_EVENT
 import org.objectweb.asm.*
 import org.objectweb.asm.commons.AdviceAdapter
@@ -10,11 +11,15 @@ import org.objectweb.asm.commons.AdviceAdapter
  * @Date 2022/4/11 15:52
  */
 class TrackLogMethodVisitor(
-    classAttributes: MutableList<Map<String, String>>, methodVisitor: MethodVisitor?, access: Int,
+    private val classAttributes: TrackEventBean, methodVisitor: MethodVisitor?, access: Int,
     name: String?, descriptor: String?,
 ) : AdviceAdapter(Opcodes.ASM7, methodVisitor, access, name, descriptor) {
     // 是否含有@TraceEvent注解
     private var hasTraceEvent = false
+    // class的@TraceEvent注解filters参数大小
+    private var filterSize = classAttributes.filters.size
+    // filters数组的标志符
+    private var filtersId :Int = 0
 
     // 方法上每有一个注解就会调用一次该方法
     override fun visitAnnotation(descriptor: String?, visible: Boolean): AnnotationVisitor {
@@ -52,39 +57,38 @@ class TrackLogMethodVisitor(
         if (!hasTraceEvent) {
             return
         }
-        val conditionLabel = Label()
-        val returnLabel = Label()
+        // 创建int数组并且储存到局部变量表中
+        filtersId = newLocal(Type.INT_TYPE)
+        mv.visitIntInsn(SIPUSH, filterSize)
+        mv.visitIntInsn(NEWARRAY, T_INT)
+        initFilters()
+        mv.visitVarInsn(ASTORE, filtersId)
 
-        // 第1段
-
-        // 第1段
-        mv.visitCode()
+        mv.visitTypeInsn(NEW, "com/xiaoan/tracklog/beans/TrackEventBean")
+        mv.visitInsn(DUP)
+        mv.visitLdcInsn(classAttributes.name)
+        mv.visitVarInsn(ALOAD, filtersId)
+        mv.visitMethodInsn(INVOKESPECIAL, "com/xiaoan/tracklog/beans/TrackEventBean", "<init>", "(Ljava/lang/String;[I)V", false)
+        //TODO object类型局部变量处理
+        val trackEventBeanId = filtersId + 1
+        mv.visitVarInsn(ASTORE, trackEventBeanId)
         mv.visitInsn(ICONST_0)
-        mv.visitVarInsn(ISTORE, 1)
-
-        // 第2段
-
-        // 第2段
-        mv.visitLabel(conditionLabel)
-        mv.visitVarInsn(ILOAD, 1)
-        mv.visitIntInsn(BIPUSH, 10)
-        mv.visitJumpInsn(IF_ICMPGE, returnLabel)
         mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
-        mv.visitVarInsn(ILOAD, 1)
-        mv.visitMethodInsn(INVOKEVIRTUAL,
-            "java/io/PrintStream",
-            "println",
-            "(I)V",
-            false)
-        mv.visitIincInsn(1, 1)
-        mv.visitJumpInsn(GOTO, conditionLabel)
-
-        // 第3段
-
-        // 第3段
-        mv.visitLabel(returnLabel)
+        mv.visitVarInsn(ALOAD, trackEventBeanId)
+        mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
         mv.visitInsn(RETURN)
-        mv.visitMaxs(0, 0)
-        // val localVariable = newLocal(Type.)
+
+    }
+
+    // 初始化filters数组
+    private fun initFilters() {
+        if (filterSize == 0) return
+        for(index in 0 until filterSize) {
+            println("" + index + "----" + classAttributes.filters[index])
+            mv.visitInsn(DUP)
+            mv.visitIntInsn(SIPUSH, index)
+            mv.visitIntInsn(SIPUSH, classAttributes.filters[index])
+            mv.visitInsn(IASTORE)
+        }
     }
 }

@@ -9,3 +9,4 @@ package com.xiaoan.tracklog.annotation
 @Target(AnnotationTarget.FUNCTION, AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
 annotation class TrackEvent(val name: String, val filters: IntArray = [])
+//TODO 设置该注解不可重复

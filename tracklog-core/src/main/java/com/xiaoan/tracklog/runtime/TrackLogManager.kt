@@ -1,6 +1,7 @@
 package com.xiaoan.tracklog.runtime
 
 import com.xiaoan.tracklog.annotation.TrackEvent
+import com.xiaoan.tracklog.beans.TrackEventBean
 
 /**
  * @Author 用于ASM触发日志事件和添加公共的参数
@@ -14,7 +15,7 @@ object TrackLogManager {
         trackLogListener = listener
     }
 
-    fun sendEvent(trackEvent: TrackEvent, attributes: MutableMap<String, Any>) {
+    fun sendEvent(trackEvent: TrackEventBean, attributes: MutableMap<String, Any>) {
         trackLogListener.onEventTriggered(trackEvent, attributes)
     }
 

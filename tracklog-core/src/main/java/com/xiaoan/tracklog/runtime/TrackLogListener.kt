@@ -1,6 +1,6 @@
 package com.xiaoan.tracklog.runtime
 
-import com.xiaoan.tracklog.annotation.TrackEvent
+import com.xiaoan.tracklog.beans.TrackEventBean
 
 interface TrackLogListener {
     /**
@@ -9,7 +9,7 @@ interface TrackLogListener {
      * @param trackEvent
      * @param attributes 参数
      */
-    fun onEventTriggered(trackEvent : TrackEvent, attributes: MutableMap<String, Any>)
+    fun onEventTriggered(trackEvent : TrackEventBean, attributes: MutableMap<String, Any>)
 
     /**
      * 添加公共的参数
