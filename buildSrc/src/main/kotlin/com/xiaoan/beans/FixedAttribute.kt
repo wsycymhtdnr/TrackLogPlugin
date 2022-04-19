@@ -1,4 +1,4 @@
-package com.xiaoan.tracklog.annotation
+package com.xiaoan.beans
 
 /**
  * @Author liyunfei

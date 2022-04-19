@@ -9,5 +9,5 @@ import jdk.jfr.Description
  */
 @Target(AnnotationTarget.TYPE)
 @Retention(AnnotationRetention.RUNTIME)
-@Description("kotlin编译器会丢弃掉局部变量注解，暂不支持")
+@Deprecated("kotlin编译器会丢弃掉局部变量注解，暂不支持")
 annotation class LocalVariableAttribute(val key: String)

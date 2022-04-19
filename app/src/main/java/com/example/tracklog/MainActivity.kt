@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import com.xiaoan.tracklog.annotation.FixedAttribute
+import com.xiaoan.tracklog.annotation.FixedAttributes
 import com.xiaoan.tracklog.annotation.TrackEvent
 import com.xiaoan.tracklog.beans.TrackEventBean
 import com.xiaoan.tracklog.runtime.*
@@ -35,7 +37,11 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    @TrackEvent("test")
+    @FixedAttributes([
+        FixedAttribute(key = "key1", value = "value1", false),
+        FixedAttribute(key = "key2", value = "value2", true)])
+//    @TrackEvent("test", [2,5,3])
+//    @FixedAttribute(key = "key1", value = "value1", false)
 //    @ReturnAttribute("ReturnAttribute")
     fun test(/*@ParameterAttribute("add") add: String*/) {
 //        val filters = intArrayOf(1, 2, 3)
