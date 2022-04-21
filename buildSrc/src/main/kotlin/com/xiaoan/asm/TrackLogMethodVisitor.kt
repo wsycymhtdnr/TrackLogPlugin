@@ -11,8 +11,6 @@ import com.xiaoan.const.AnnotationConstants.PARAMETER_ATTRIBUTE
 import com.xiaoan.const.AnnotationConstants.RETURN_ATTRIBUTE
 import com.xiaoan.const.AnnotationConstants.TRACK_EVENT
 import com.xiaoan.const.AnnotationConstants.VALUE
-import com.xiaoan.utils.ReturnAttributeUtils.printInt
-import com.xiaoan.utils.ReturnAttributeUtils.printObject
 import org.objectweb.asm.AnnotationVisitor
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
@@ -24,7 +22,8 @@ import org.objectweb.asm.commons.AdviceAdapter
  * @Description 访问方法的信息，并且插入埋点代码， AOP Advice概念
  * @Date 2022/4/11 15:52
  */
-class TrackLogMethodVisitor(classAttributes: TrackEventBean, methodVisitor: MethodVisitor?, access: Int,
+class TrackLogMethodVisitor(
+    classAttributes: TrackEventBean, methodVisitor: MethodVisitor?, access: Int,
     methodName: String?, descriptor: String?,
 ) : AdviceAdapter(Opcodes.ASM7, methodVisitor, access, methodName, descriptor) {
     // 是否含有@TraceEvent注解
@@ -53,8 +52,13 @@ class TrackLogMethodVisitor(classAttributes: TrackEventBean, methodVisitor: Meth
     private var hasReturnAnnotation = false
     // @ReturnAnnotation注解key
     private var returnKey = "return_key"
-
+    // @ReturnAnnotation注解是否是公共
     private var isReturnShared = false
+    // 临时的本地变量slot index, 用于在返回之前存放@ReturnAttribute数据
+    private var tempKeySlotIndex = 0
+    private var tempValueSlotIndex = 0
+    // 方法入参的Type
+    private var parameterType = arrayOf<Type>()
 
     // 用于构建埋点属性的参数
     private var key = "default_key"
@@ -82,7 +86,7 @@ class TrackLogMethodVisitor(classAttributes: TrackEventBean, methodVisitor: Meth
                     return object: AnnotationVisitor(Opcodes.ASM7, super.visitArray(name)){
                         override fun visitAnnotation(
                             name: String?,
-                            descriptor: String?
+                            descriptor: String?,
                         ): AnnotationVisitor {
                             return object : AnnotationVisitor(Opcodes.ASM7, super.visitAnnotation(name, descriptor)){
                                 override fun visit(name: String?, value: Any?) {
@@ -165,27 +169,22 @@ class TrackLogMethodVisitor(classAttributes: TrackEventBean, methodVisitor: Meth
 
     override fun visitInsn(opcode: Int) {
         // 首先，处理自己的代码逻辑
-        if (opcode >= IRETURN && opcode <= RETURN || opcode == ATHROW) {
+        if ((opcode in IRETURN..RETURN) && hasReturnAnnotation) {
             //printMessage("Method Exit:")
             if (opcode == IRETURN) {
-                super.visitInsn(DUP)
-                printInt(mv)
+                handleOneSlotReturnType()
             } else if (opcode == FRETURN) {
-                super.visitInsn(DUP)
-                //printFloat()
+                handleOneSlotReturnType()
             } else if (opcode == LRETURN) {
-                super.visitInsn(DUP2)
-                //printLong()
+                handleLongReturnType()
             } else if (opcode == DRETURN) {
-                super.visitInsn(DUP2)
-                //printDouble()
+                handleDoubleReturnType()
             } else if (opcode == ARETURN) {
-                super.visitInsn(DUP)
-                printObject(this, returnKey, if(isReturnShared) attributesIndex else sharedAttributesIndex)
+                handleOneSlotReturnType()
             } else if (opcode == RETURN) {
-                //printMessage("    return void")
+                 printMessage("return void")
             } else {
-                //printMessage("    abnormal return")
+                printMessage("abnormal return")
             }
         }
 
@@ -261,15 +260,16 @@ class TrackLogMethodVisitor(classAttributes: TrackEventBean, methodVisitor: Meth
         if (!hasTraceEvent) {
             return
         }
+//
+//        attributes.forEach {
+//            println("attribute---$it")
+//        }
+//        sharedAttributes.forEach {
+//            println("shardAttributes---$it")
+//        }
+//        println(parameterIndexes.size)
+//        println(parameterNames.size)
 
-        attributes.forEach {
-            println("attribute---$it")
-        }
-        sharedAttributes.forEach {
-            println("shardAttributes---$it")
-        }
-        println(parameterIndexes.size)
-        println(parameterNames.size)
         generateTrackEventBeanInsn()
         generateShardAttributesInsn()
         generateAttributesInsn()
@@ -294,6 +294,8 @@ class TrackLogMethodVisitor(classAttributes: TrackEventBean, methodVisitor: Meth
 
     // 给@ParameterAttribute注解的参数赋值， visitParameterAnnotation()方法只给了一个默认值
     private fun assignParameterAttribute() {
+        val methodType = Type.getMethodType(methodDesc)
+        parameterType = methodType.argumentTypes
         parameterIndexes.forEachIndexed { index, value ->
             val key = parameterNames[index]
             traverseAttributesMapAndModify(attributes, key, value, attributesIndex)
@@ -328,14 +330,16 @@ class TrackLogMethodVisitor(classAttributes: TrackEventBean, methodVisitor: Meth
     }
 
     private fun traverseAttributesMap(map :MutableMap<String, Any>, index: Int) {
+        tempKeySlotIndex = newLocal(Type.INT_TYPE)
+        tempValueSlotIndex = newLocal(Type.INT_TYPE)
         map.forEach {
             mv.visitVarInsn(ALOAD, index)
             mv.visitLdcInsn(it.key)
-            mv.visitVarInsn(ASTORE, index+1)
+            mv.visitVarInsn(ASTORE, tempKeySlotIndex)
             mv.visitLdcInsn(it.value)
-            mv.visitVarInsn(ASTORE, index+2)
-            mv.visitVarInsn(ALOAD, index+1)
-            mv.visitVarInsn(ALOAD, index+2)
+            mv.visitVarInsn(ASTORE, tempValueSlotIndex)
+            mv.visitVarInsn(ALOAD, tempKeySlotIndex)
+            mv.visitVarInsn(ALOAD, tempValueSlotIndex)
             mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
         }
     }
@@ -353,13 +357,74 @@ class TrackLogMethodVisitor(classAttributes: TrackEventBean, methodVisitor: Meth
             if (modifyKey == it.key) {
                 mv.visitVarInsn(ALOAD, index)
                 mv.visitLdcInsn(it.key)
-                mv.visitVarInsn(ASTORE, index+1)
-                mv.visitVarInsn(ALOAD, index+1)
-                mv.visitVarInsn(ALOAD, modifyValueIndex)
-                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+//                mv.visitVarInsn(ALOAD, modifyValueIndex)
+//                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+                loadParamValueAndPutMap(modifyValueIndex)
             }
           }
+    }
+
+    // 加载入参的value判断类型并且放到参数map里面去
+    private fun loadParamValueAndPutMap(modifyValueIndex: Int) {
+        // 非静态变量第一个参数是this， 所以需要index - 1
+        val parameterTypeIndex = modifyValueIndex - 1
+        println(parameterType[parameterTypeIndex].sort)
+        when (parameterType[parameterTypeIndex].sort) {
+            //TODO
+            //VOID, BOOLEAN, CHAR, BYTE, SHORT, INT, FLOAT, LONG, DOUBLE, ARRAY, OBJECT or METHOD
+            Type.CHAR -> {
+                mv.visitVarInsn(ILOAD, modifyValueIndex)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
+                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+            }
+            Type.BYTE -> {
+                mv.visitVarInsn(ILOAD, modifyValueIndex)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false);
+                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+            }
+            Type.SHORT -> {
+                mv.visitVarInsn(ILOAD, modifyValueIndex)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
+                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+            }
+            Type.INT -> {
+                mv.visitVarInsn(ILOAD, modifyValueIndex)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+            }
+            Type.FLOAT -> {
+                mv.visitVarInsn(FLOAD, modifyValueIndex)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
+                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+
+            }
+            Type.LONG -> {
+                mv.visitVarInsn(LLOAD, modifyValueIndex)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+            }
+            Type.DOUBLE -> {
+                mv.visitVarInsn(DLOAD, modifyValueIndex)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+
+            }
+            Type.BOOLEAN -> {
+                mv.visitVarInsn(ILOAD, modifyValueIndex)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
+                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+
+            }
+            Type.OBJECT -> {
+                mv.visitVarInsn(ILOAD, modifyValueIndex)
+                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+            }
+            else -> {
+                mv.visitVarInsn(ILOAD, modifyValueIndex)
+                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+            }
         }
+    }
 
     // 生成发送埋点事件的指令
     private fun generateSendEventInsn() {
@@ -396,5 +461,65 @@ class TrackLogMethodVisitor(classAttributes: TrackEventBean, methodVisitor: Meth
             mv.visitIntInsn(SIPUSH, filters[index])
             mv.visitInsn(IASTORE)
         }
+    }
+
+    // 处理只占一个slot的返回值 (int char short byte 引用类型)
+    private fun handleOneSlotReturnType() {
+//        mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
+//        mv.visitVarInsn(ALOAD, attributesIndex)
+//        mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
+        val valueIndex = newLocal(Type.INT_TYPE)
+        mv.visitInsn(DUP)
+        mv.visitVarInsn(ASTORE, valueIndex)
+        val keyIndex = newLocal(Type.INT_TYPE)
+        mv.visitLdcInsn(returnKey)
+        mv.visitVarInsn(ASTORE, keyIndex)
+
+        mv.visitVarInsn(ALOAD, attributesIndex)
+        mv.visitVarInsn(ALOAD, keyIndex)
+        mv.visitVarInsn(ALOAD, valueIndex)
+        mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+        mv.visitVarInsn(ALOAD, valueIndex)
+    }
+
+    // 处理Long类型的返回值
+    private fun handleLongReturnType() {
+        val valueIndex = newLocal(Type.LONG_TYPE)
+        mv.visitVarInsn(LSTORE, valueIndex)
+
+        val keyIndex = newLocal(Type.INT_TYPE)
+        mv.visitLdcInsn(returnKey)
+        mv.visitVarInsn(ASTORE, keyIndex)
+
+        mv.visitVarInsn(ALOAD, attributesIndex)
+        mv.visitVarInsn(ALOAD, keyIndex)
+        mv.visitVarInsn(LLOAD, valueIndex)
+        mv.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+        mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+        mv.visitVarInsn(LLOAD, valueIndex)
+    }
+
+    // 处理double类型的返回值
+    private fun handleDoubleReturnType() {
+        val valueIndex = newLocal(Type.DOUBLE_TYPE)
+        mv.visitVarInsn(DSTORE, valueIndex)
+
+        val keyIndex = newLocal(Type.INT_TYPE)
+        mv.visitLdcInsn(returnKey)
+        mv.visitVarInsn(ASTORE, keyIndex)
+
+        mv.visitVarInsn(ALOAD, attributesIndex)
+        mv.visitVarInsn(ALOAD, keyIndex)
+        mv.visitVarInsn(DLOAD, valueIndex)
+        mv.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+        mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+        mv.visitVarInsn(DLOAD, valueIndex)
+    }
+
+
+    private fun printMessage(msg: String) {
+        mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
+        mv.visitLdcInsn(msg)
+        mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
     }
 }

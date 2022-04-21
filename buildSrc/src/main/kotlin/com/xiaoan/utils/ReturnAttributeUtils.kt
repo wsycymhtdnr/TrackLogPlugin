@@ -1,5 +1,6 @@
 package com.xiaoan.utils
 
+import com.xiaoan.asm.TrackLogMethodVisitor
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Type
 import org.objectweb.asm.commons.AdviceAdapter
@@ -55,23 +56,22 @@ object ReturnAttributeUtils {
         mv.visitMethodInsn(AdviceAdapter.INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false)
     }
 
-    fun printObject(mv: LocalVariablesSorter, returnKey: String, attributesIndex: Int) {
-
-        mv.visitFieldInsn(AdviceAdapter.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
+    fun printObject(
+        mv: TrackLogMethodVisitor,
+        returnKey: String,
+        attributesIndex: Int
+    ) {
+        val valueIndex = mv.newLocal(Type.INT_TYPE)
         mv.visitInsn(AdviceAdapter.DUP)
-        val temp = mv.newLocal(Type.INT_TYPE)
-        mv.visitVarInsn(AdviceAdapter.ASTORE, temp)
+        mv.visitVarInsn(AdviceAdapter.ASTORE, valueIndex)
+        val keyIndex = mv.newLocal(Type.INT_TYPE)
         mv.visitLdcInsn(returnKey)
-        mv.visitVarInsn(AdviceAdapter.ASTORE, temp+1)
-        mv.visitVarInsn(AdviceAdapter.ALOAD, attributesIndex)
-        mv.visitVarInsn(AdviceAdapter.ALOAD, temp+1)
-        mv.visitVarInsn(AdviceAdapter.ALOAD, temp)
-        mv.visitMethodInsn(AdviceAdapter.INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
-        mv.visitInsn(AdviceAdapter.POP)
+        mv.visitVarInsn(AdviceAdapter.ASTORE, keyIndex)
 
-//        mv.visitFieldInsn(AdviceAdapter.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
         mv.visitVarInsn(AdviceAdapter.ALOAD, attributesIndex)
-        mv.visitMethodInsn(AdviceAdapter.INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false)
-        mv.visitInsn(AdviceAdapter.POP)
+        mv.visitVarInsn(AdviceAdapter.ALOAD, keyIndex)
+        mv.visitVarInsn(AdviceAdapter.ALOAD, valueIndex)
+        mv.visitMethodInsn(AdviceAdapter.INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+        mv.visitVarInsn(AdviceAdapter.ALOAD, valueIndex)
     }
 }
