@@ -9,7 +9,7 @@ import com.xiaoan.tracklog.beans.TrackEventBean
  * @Date 2022/4/10 23:12
  */
 object TrackLog : TrackLogListener {
-    private val sharedAttributes = mutableMapOf<String, Any>()
+    private var sharedAttributes = mutableMapOf<String, Any>()
     private lateinit var logger: EventLogListener
     private lateinit var eventSubscriber: EventSubscriber
 
@@ -52,7 +52,7 @@ object TrackLog : TrackLogListener {
         trackEvent(event)
     }
 
-    override fun onSharedAttributeAdded(key: String?, value: Any?) {
-        TODO("Not yet implemented")
+    override fun onSharedAttributeAdded(sharedAttributes: MutableMap<String, Any>) {
+        this.sharedAttributes.putAll(sharedAttributes)
     }
 }

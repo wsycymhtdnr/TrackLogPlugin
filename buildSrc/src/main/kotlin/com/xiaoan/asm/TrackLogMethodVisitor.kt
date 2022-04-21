@@ -3,27 +3,30 @@ package com.xiaoan.asm
 import com.sun.xml.fastinfoset.util.StringArray
 import com.xiaoan.beans.TrackEventBean
 import com.xiaoan.const.AnnotationConstants
-import com.xiaoan.const.AnnotationConstants.KEY
-import com.xiaoan.const.AnnotationConstants.VALUE
-import com.xiaoan.const.AnnotationConstants.IS_SHARED
 import com.xiaoan.const.AnnotationConstants.FIXED_ATTRIBUTE
-import com.xiaoan.const.AnnotationConstants.TRACK_EVENT
 import com.xiaoan.const.AnnotationConstants.FIXED_ATTRIBUTES
+import com.xiaoan.const.AnnotationConstants.IS_SHARED
+import com.xiaoan.const.AnnotationConstants.KEY
 import com.xiaoan.const.AnnotationConstants.PARAMETER_ATTRIBUTE
 import com.xiaoan.const.AnnotationConstants.RETURN_ATTRIBUTE
-import org.objectweb.asm.*
+import com.xiaoan.const.AnnotationConstants.TRACK_EVENT
+import com.xiaoan.const.AnnotationConstants.VALUE
+import com.xiaoan.utils.ReturnAttributeUtils.printInt
+import com.xiaoan.utils.ReturnAttributeUtils.printObject
+import org.objectweb.asm.AnnotationVisitor
+import org.objectweb.asm.MethodVisitor
+import org.objectweb.asm.Opcodes
+import org.objectweb.asm.Type
 import org.objectweb.asm.commons.AdviceAdapter
-import java.lang.IllegalArgumentException
 
 /**
  * @Author liyunfei
  * @Description 访问方法的信息，并且插入埋点代码， AOP Advice概念
  * @Date 2022/4/11 15:52
  */
-class TrackLogMethodVisitor(
-    private val classAttributes: TrackEventBean, methodVisitor: MethodVisitor?, access: Int,
-    name: String?, descriptor: String?,
-) : AdviceAdapter(Opcodes.ASM7, methodVisitor, access, name, descriptor) {
+class TrackLogMethodVisitor(classAttributes: TrackEventBean, methodVisitor: MethodVisitor?, access: Int,
+    methodName: String?, descriptor: String?,
+) : AdviceAdapter(Opcodes.ASM7, methodVisitor, access, methodName, descriptor) {
     // 是否含有@TraceEvent注解
     private var hasTraceEvent = false
     // class的@TraceEvent注解filters参数大小,解析完方法注解后加上方法注解filters
@@ -46,6 +49,12 @@ class TrackLogMethodVisitor(
     private var parameterIndexes = intArrayOf()
     // @ParameterAttribute注解入参name
     private var parameterNames = StringArray()
+    // 是否有@ReturnAnnotation注解
+    private var hasReturnAnnotation = false
+    // @ReturnAnnotation注解key
+    private var returnKey = "return_key"
+
+    private var isReturnShared = false
 
     // 用于构建埋点属性的参数
     private var key = "default_key"
@@ -53,8 +62,10 @@ class TrackLogMethodVisitor(
     private var isShared = false
 
     override fun visitAnnotation(descriptor: String?, visible: Boolean): AnnotationVisitor {
-        return if (descriptor == TRACK_EVENT || descriptor == FIXED_ATTRIBUTE ||descriptor == FIXED_ATTRIBUTES) {
+        return if (descriptor == TRACK_EVENT || descriptor == FIXED_ATTRIBUTE
+            || descriptor == FIXED_ATTRIBUTES || descriptor == RETURN_ATTRIBUTE) {
             if(descriptor == TRACK_EVENT) hasTraceEvent = true
+            if (descriptor == RETURN_ATTRIBUTE) hasReturnAnnotation = true
             object: AnnotationVisitor(Opcodes.ASM7, super.visitAnnotation(descriptor, visible)) {
                 override fun visitEnd() {
                     super.visitEnd()
@@ -99,15 +110,27 @@ class TrackLogMethodVisitor(
                     super.visit(name, value)
                     when (descriptor) {
                         TRACK_EVENT -> handleTrackEvent(name, value)
+                        // TODO 暂时不支持
                         // FIXED_ATTRIBUTE -> handleFixedAttribute(name, value)
-                        //FIXED_ATTRIBUTES -> handleFixedAttributes(name, value)
                         // LOCAL_VARIABLE_ATTRIBUTE -> {}
-                        RETURN_ATTRIBUTE -> {}
+                        RETURN_ATTRIBUTE -> handleReturnAttribute(name, value)
                     }
                 }
             }
         } else {
             super.visitAnnotation(descriptor, visible)
+        }
+    }
+
+    private fun handleReturnAttribute(name: String?, value: Any?) {
+        when (name) {
+            KEY -> {
+                if (attributes.keys.contains(value.toString()) || sharedAttributes.keys.contains(value.toString())) {
+                    throw IllegalArgumentException("已经存在相同的key:---${value.toString()},请检查相关埋点注解")
+                }
+                returnKey = value.toString()
+            }
+            IS_SHARED -> isReturnShared = value as Boolean
         }
     }
 
@@ -127,7 +150,7 @@ class TrackLogMethodVisitor(
                     super.visitEnd()
                     if (key!="default_key" && value!="default_value") {
                         // 非静态方法第一个参数是this
-                        parameterIndexes.plus(parameter + 1)
+                        parameterIndexes = parameterIndexes.plus(parameter + 1)
                         parameterNames.add(key)
                         if (isShared) {
                             sharedAttributes[key] = value
@@ -140,9 +163,34 @@ class TrackLogMethodVisitor(
         }
     }
 
-    override fun visitLocalVariable(name: String?, descriptor: String?, signature: String?, start: Label?,
-                                    end: Label?, index: Int) {
-        super.visitLocalVariable(name, descriptor, signature, start, end, index)
+    override fun visitInsn(opcode: Int) {
+        // 首先，处理自己的代码逻辑
+        if (opcode >= IRETURN && opcode <= RETURN || opcode == ATHROW) {
+            //printMessage("Method Exit:")
+            if (opcode == IRETURN) {
+                super.visitInsn(DUP)
+                printInt(mv)
+            } else if (opcode == FRETURN) {
+                super.visitInsn(DUP)
+                //printFloat()
+            } else if (opcode == LRETURN) {
+                super.visitInsn(DUP2)
+                //printLong()
+            } else if (opcode == DRETURN) {
+                super.visitInsn(DUP2)
+                //printDouble()
+            } else if (opcode == ARETURN) {
+                super.visitInsn(DUP)
+                printObject(this, returnKey, if(isReturnShared) attributesIndex else sharedAttributesIndex)
+            } else if (opcode == RETURN) {
+                //printMessage("    return void")
+            } else {
+                //printMessage("    abnormal return")
+            }
+        }
+
+        // 其次，调用父类的方法实现
+        super.visitInsn(opcode)
     }
 
     // 处理@ParameterAttribute注解，kotlin1.6之前不支持可重复注解
@@ -220,6 +268,8 @@ class TrackLogMethodVisitor(
         sharedAttributes.forEach {
             println("shardAttributes---$it")
         }
+        println(parameterIndexes.size)
+        println(parameterNames.size)
         generateTrackEventBeanInsn()
         generateShardAttributesInsn()
         generateAttributesInsn()
@@ -231,23 +281,24 @@ class TrackLogMethodVisitor(
             return
         }
         super.onMethodExit(opcode)
-        //generateSendEventInsn()
+        generateAddSharedAttribute()
+        generateSendEventInsn()
+    }
+
+    // 添加公共参数
+    private fun generateAddSharedAttribute() {
+        mv.visitFieldInsn(GETSTATIC, "com/xiaoan/tracklog/runtime/TrackLogManager", "INSTANCE", "Lcom/xiaoan/tracklog/runtime/TrackLogManager;")
+        mv.visitVarInsn(ALOAD, sharedAttributesIndex)
+        mv.visitMethodInsn(INVOKEVIRTUAL, "com/xiaoan/tracklog/runtime/TrackLogManager", "addSharedAttribute", "(Ljava/util/Map;)V", false)
     }
 
     // 给@ParameterAttribute注解的参数赋值， visitParameterAnnotation()方法只给了一个默认值
     private fun assignParameterAttribute() {
-        val index = newLocal(Type.INT_TYPE)
-        mv.visitLdcInsn(parameterIndexes)
-        mv.visitVarInsn(ASTORE, index)
-        mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
-        mv.visitVarInsn(ALOAD, index)
-        mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
-//        parameterIndexes.forEachIndexed { index, _ ->
-//            val key = parameterNames[index]
-//            traverseAttributesMapAndModify(attributes, key, attributesIndex)
-//            traverseAttributesMapAndModify(sharedAttributes, key, sharedAttributesIndex)
-//        }
-
+        parameterIndexes.forEachIndexed { index, value ->
+            val key = parameterNames[index]
+            traverseAttributesMapAndModify(attributes, key, value, attributesIndex)
+            traverseAttributesMapAndModify(sharedAttributes, key, value, sharedAttributesIndex)
+        }
     }
 
     // 生成公共的attributes变量相关的指令
@@ -255,7 +306,7 @@ class TrackLogMethodVisitor(
         sharedAttributesIndex = newLocal(Type.INT_TYPE)
         mv.visitTypeInsn(NEW, "java/util/LinkedHashMap")
         mv.visitInsn(DUP)
-        mv.visitMethodInsn(INVOKESPECIAL, "java/util/LinkedHashMap", "<init>", "()V", false);
+        mv.visitMethodInsn(INVOKESPECIAL, "java/util/LinkedHashMap", "<init>", "()V", false)
         mv.visitTypeInsn(CHECKCAST, "java/util/Map")
         mv.visitVarInsn(ASTORE, sharedAttributesIndex)
         mv.visitVarInsn(ALOAD, sharedAttributesIndex)
@@ -269,7 +320,7 @@ class TrackLogMethodVisitor(
         attributesIndex = newLocal(Type.INT_TYPE)
         mv.visitTypeInsn(NEW, "java/util/LinkedHashMap")
         mv.visitInsn(DUP)
-        mv.visitMethodInsn(INVOKESPECIAL, "java/util/LinkedHashMap", "<init>", "()V", false);
+        mv.visitMethodInsn(INVOKESPECIAL, "java/util/LinkedHashMap", "<init>", "()V", false)
         mv.visitTypeInsn(CHECKCAST, "java/util/Map")
         mv.visitVarInsn(ASTORE, attributesIndex)
         traverseAttributesMap(attributes, attributesIndex)
@@ -285,49 +336,37 @@ class TrackLogMethodVisitor(
             mv.visitVarInsn(ASTORE, index+2)
             mv.visitVarInsn(ALOAD, index+1)
             mv.visitVarInsn(ALOAD, index+2)
-            mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true);
+            mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
         }
-//        mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
-//        mv.visitVarInsn(ALOAD, index)
-//        mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
     }
 
-    private fun traverseAttributesMapAndModify(map: MutableMap<String, Any>, modifyKey: String, index: Int) {
+    /**
+     * Traverse attributes map and modify
+     *
+     * @param map 参数集合 attribute sharedAttribute 私有参数和共享参数
+     * @param modifyKey 被修改参数的key
+     * @param modifyValueIndex 被修改参数的value对应在本地变量表的位置
+     * @param index 参数集合在本地变量表的位置 (attribute sharedAttribute)
+     */
+    private fun traverseAttributesMapAndModify(map: MutableMap<String, Any>, modifyKey: String, modifyValueIndex: Int, index: Int) {
         map.forEach {
-            mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
-            mv.visitLdcInsn(modifyKey)
-            mv.visitVarInsn(ASTORE, index+1)
-            mv.visitVarInsn(ALOAD, index+1)
-            mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
-
-            mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
-            mv.visitLdcInsn(it.key)
-            mv.visitVarInsn(ASTORE, index+2)
-            mv.visitVarInsn(ALOAD, index+2)
-            mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
-
             if (modifyKey == it.key) {
                 mv.visitVarInsn(ALOAD, index)
                 mv.visitLdcInsn(it.key)
                 mv.visitVarInsn(ASTORE, index+1)
-                mv.visitLdcInsn(it.value)
-                mv.visitVarInsn(ASTORE, index+2)
                 mv.visitVarInsn(ALOAD, index+1)
-                mv.visitVarInsn(ALOAD, index+2)
-                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true);
+                mv.visitVarInsn(ALOAD, modifyValueIndex)
+                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
             }
           }
-        mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
-        mv.visitVarInsn(ALOAD, index)
-        mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
-    }
+        }
 
     // 生成发送埋点事件的指令
     private fun generateSendEventInsn() {
-        mv.visitFieldInsn(GETSTATIC, "com/xiaoan/tracklog/runtime/TrackLogManager", "INSTANCE", "Lcom/xiaoan/tracklog/runtime/TrackLogManager;");
-        mv.visitVarInsn(ALOAD, trackLogIndex);
-        mv.visitVarInsn(ALOAD, attributesIndex);
-        mv.visitMethodInsn(INVOKEVIRTUAL, "com/xiaoan/tracklog/runtime/TrackLogManager", "sendEvent", "(Lcom/xiaoan/tracklog/beans/TrackEventBean;Ljava/util/Map;)V", false);
+        mv.visitFieldInsn(GETSTATIC, "com/xiaoan/tracklog/runtime/TrackLogManager", "INSTANCE", "Lcom/xiaoan/tracklog/runtime/TrackLogManager;")
+        mv.visitVarInsn(ALOAD, trackLogIndex)
+        mv.visitVarInsn(ALOAD, attributesIndex)
+        mv.visitMethodInsn(INVOKEVIRTUAL, "com/xiaoan/tracklog/runtime/TrackLogManager", "sendEvent", "(Lcom/xiaoan/tracklog/beans/TrackEventBean;Ljava/util/Map;)V", false)
     }
 
     // 生成rackEventBean的相关指令
@@ -346,9 +385,6 @@ class TrackLogMethodVisitor(
         mv.visitMethodInsn(INVOKESPECIAL, "com/xiaoan/tracklog/beans/TrackEventBean", "<init>", "(Ljava/lang/String;[I)V", false)
         trackLogIndex = newLocal(Type.INT_TYPE)
         mv.visitVarInsn(ASTORE, trackLogIndex)
-        mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
-        mv.visitVarInsn(ALOAD, trackLogIndex)
-        mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
     }
 
     // 初始化filters数组

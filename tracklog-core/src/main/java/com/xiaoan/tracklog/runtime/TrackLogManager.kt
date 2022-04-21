@@ -1,6 +1,5 @@
 package com.xiaoan.tracklog.runtime
 
-import com.xiaoan.tracklog.annotation.TrackEvent
 import com.xiaoan.tracklog.beans.TrackEventBean
 
 /**
@@ -19,7 +18,7 @@ object TrackLogManager {
         trackLogListener.onEventTriggered(trackEvent, attributes)
     }
 
-    fun addSharedAttribute(key: String, value: Any) {
-        trackLogListener.onSharedAttributeAdded(key, value)
+    fun addSharedAttribute(attributes: MutableMap<String, Any>) {
+        trackLogListener.onSharedAttributeAdded(attributes)
     }
 }

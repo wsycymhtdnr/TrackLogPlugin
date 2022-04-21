@@ -17,5 +17,5 @@ interface TrackLogListener {
      * @param key
      * @param value
      */
-    fun onSharedAttributeAdded(key: String?, value: Any?)
+    fun onSharedAttributeAdded(sharedAttributes: MutableMap<String, Any>)
 }

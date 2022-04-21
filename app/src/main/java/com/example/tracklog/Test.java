@@ -10,11 +10,7 @@ import com.xiaoan.tracklog.annotation.TrackEvent;
 public class Test {
     @TrackEvent(name = "qweqe")
     public static void test() {
-        @LocalVariableJava(key = "lyg")
         String string = "dadadad";
         //Log.d("lyf", string);
-    }
-    @interface LocalVariableJava {
-        String key();
     }
 }
