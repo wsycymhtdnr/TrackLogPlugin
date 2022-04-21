@@ -1,6 +1,5 @@
 package com.xiaoan.tracklog.runtime
 
-import com.xiaoan.tracklog.annotation.TrackEvent
 import com.xiaoan.tracklog.beans.TrackEventBean
 
 /**
@@ -10,7 +9,8 @@ import com.xiaoan.tracklog.beans.TrackEventBean
  */
 object TrackLog : TrackLogListener {
     private var sharedAttributes = mutableMapOf<String, Any>()
-    private lateinit var logger: EventLogListener
+    private var logger: EventLogListener? = null
+    private var filter: IntArray? = null
     private lateinit var eventSubscriber: EventSubscriber
 
     fun init(eventSubscriber: EventSubscriber): TrackLog {
@@ -20,14 +20,37 @@ object TrackLog : TrackLogListener {
     }
 
 
-    fun setEventLogListener(logger: EventLogListener) {
+    fun addEventLogListener(logger: EventLogListener) : TrackLog{
         this.logger = logger
+        return this
+    }
+
+    fun addFilter(filter: IntArray) : TrackLog{
+        this.filter = filter
+        return this
     }
 
     private fun trackEvent(event: Event) {
-        eventSubscriber.onEventTracked(event)
-        log(event)
+        if (filterEvent(event)) {
+            eventSubscriber.onEventTracked(event)
+        }
+
+        if (logger != null && filterEvent(event)) {
+            log(event)
+        }
         EventPool.recycle(event)
+    }
+
+    private fun filterEvent(event: Event) :Boolean {
+        if (filter == null) {
+            return true
+        }
+        filter!!.asSequence()
+            .count {
+                event.filters.contains(it)
+            }.run {
+                return this != 0
+            }
     }
 
     private fun log(event: Event) {
@@ -39,8 +62,10 @@ object TrackLog : TrackLogListener {
             .append(sharedAttributes.toString())
             .append(", filters: ")
             .append(event.filters.contentToString())
-        logger.log(builder.toString())
+        logger?.log(builder.toString())
     }
+
+
 
     override fun onEventTriggered(trackEvent: TrackEventBean, attributes: MutableMap<String, Any>) {
         val event = EventPool.obtain().apply {

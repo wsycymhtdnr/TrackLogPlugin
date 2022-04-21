@@ -22,7 +22,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.textview).apply {
             setOnClickListener {
                 try {
-                    println(test(Date(),"a",123,'a',"b".toShort(), 1.44f, 14546L, 454.6546, false, 'r'))
+                    println(test(Date(),"a",123,'a',"12".toShort(), 1.44f, 14546L, 454.6546, false, 'r'))
                 } catch (e: Exception) {
                     println(e)
                 }
@@ -35,11 +35,11 @@ class MainActivity : AppCompatActivity() {
             override fun onEventTracked(event: Event) {
 
             }
-        }).setEventLogListener(object : EventLogListener {
+        }).addEventLogListener(object : EventLogListener {
             override fun log(message: String) {
                 Log.d("Tracker", message)
             }
-        })
+        }).addFilter(intArrayOf(1,5))
     }
 
     @FixedAttributes([
@@ -57,7 +57,7 @@ class MainActivity : AppCompatActivity() {
              @ParameterAttribute("f", true)f: Long,
              @ParameterAttribute("g", true)g: Double,
              @ParameterAttribute("h", true)h: Boolean,
-             @ParameterAttribute("i", true)i: Char): Double {
+             @ParameterAttribute("i", true)i: Char): Int {
 //        println(classTrackEvent)
 //        val string  = "test"
 //        Log.d("lyf", string)
@@ -77,17 +77,30 @@ class MainActivity : AppCompatActivity() {
 //        TrackLogManager.sendEvent(classTrackEvent, map2)
 //        return "111"
 //            val `is`: InputStream = FileInputStream("E:/iodemo/ch01.txt")
-        val a = 'a'.code.toShort()
-        map1.put("sada",a)
-        val b = 1.000f
-        map1.put("sada",b)
-        val c = 1000L
-        map1.put("sada",c)
-        val d = 8.55666
-        map1.put("sada",d)
-        val e = false
-        map1.put("sada",e)
-        return 1.222
+
+//        val a = 'a'.code.toShort()
+//        map1.put("sada",a)
+//        val b = 1.000f
+//        map1.put("sada",b)
+//        val c = 1000L
+//        map1.put("sada",c)
+//        val d = 8.55666
+//        map1.put("sada",d)
+//        val e = false
+//        map1.put("sada",e)
+        map1.put("sada","asdasdsad")
+        map1.put("sadasdsaa",222.54564)
+        val map2: MutableMap<String, Any> = mutableMapOf()
+        map1.putAll(map2)
+        println(map1)
+        test2("test2")
+        return 4646
+    }
+
+    @TrackEvent("test2")
+    @ReturnAttribute("test2_return", true)
+    fun test2(@ParameterAttribute("test2_a") a:String) : String{
+        return a+"return"
     }
 
 }

@@ -59,6 +59,8 @@ class TrackLogMethodVisitor(
     private var tempValueSlotIndex = 0
     // 方法入参的Type
     private var parameterType = arrayOf<Type>()
+    // 由于double和long占用两个slot，所以parameterIndexes里面的元素可能在slot上的位置会发生偏移
+    private var parameterIndexOffset = 0
 
     // 用于构建埋点属性的参数
     private var key = "default_key"
@@ -170,21 +172,14 @@ class TrackLogMethodVisitor(
     override fun visitInsn(opcode: Int) {
         // 首先，处理自己的代码逻辑
         if ((opcode in IRETURN..RETURN) && hasReturnAnnotation) {
-            //printMessage("Method Exit:")
-            if (opcode == IRETURN) {
-                handleOneSlotReturnType()
-            } else if (opcode == FRETURN) {
-                handleOneSlotReturnType()
-            } else if (opcode == LRETURN) {
-                handleLongReturnType()
-            } else if (opcode == DRETURN) {
-                handleDoubleReturnType()
-            } else if (opcode == ARETURN) {
-                handleOneSlotReturnType()
-            } else if (opcode == RETURN) {
-                 printMessage("return void")
-            } else {
-                printMessage("abnormal return")
+            when (opcode) {
+                IRETURN -> handleIntReturnType()
+                FRETURN -> handleFloatReturnType()
+                LRETURN -> handleLongReturnType()
+                DRETURN -> handleDoubleReturnType()
+                ARETURN -> handleAReturnType()
+                RETURN -> printMessage("return void")
+                else -> printMessage("abnormal return")
             }
         }
 
@@ -260,15 +255,6 @@ class TrackLogMethodVisitor(
         if (!hasTraceEvent) {
             return
         }
-//
-//        attributes.forEach {
-//            println("attribute---$it")
-//        }
-//        sharedAttributes.forEach {
-//            println("shardAttributes---$it")
-//        }
-//        println(parameterIndexes.size)
-//        println(parameterNames.size)
 
         generateTrackEventBeanInsn()
         generateShardAttributesInsn()
@@ -347,7 +333,7 @@ class TrackLogMethodVisitor(
     /**
      * Traverse attributes map and modify
      *
-     * @param map 参数集合 attribute sharedAttribute 私有参数和共享参数
+     * @param map 埋点参数集合 attribute sharedAttribute 私有参数和共享参数
      * @param modifyKey 被修改参数的key
      * @param modifyValueIndex 被修改参数的value对应在本地变量表的位置
      * @param index 参数集合在本地变量表的位置 (attribute sharedAttribute)
@@ -357,8 +343,6 @@ class TrackLogMethodVisitor(
             if (modifyKey == it.key) {
                 mv.visitVarInsn(ALOAD, index)
                 mv.visitLdcInsn(it.key)
-//                mv.visitVarInsn(ALOAD, modifyValueIndex)
-//                mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
                 loadParamValueAndPutMap(modifyValueIndex)
             }
           }
@@ -373,54 +357,54 @@ class TrackLogMethodVisitor(
             //TODO
             //VOID, BOOLEAN, CHAR, BYTE, SHORT, INT, FLOAT, LONG, DOUBLE, ARRAY, OBJECT or METHOD
             Type.CHAR -> {
-                mv.visitVarInsn(ILOAD, modifyValueIndex)
-                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
+                mv.visitVarInsn(ILOAD, modifyValueIndex + parameterIndexOffset)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false)
                 mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
             }
             Type.BYTE -> {
-                mv.visitVarInsn(ILOAD, modifyValueIndex)
-                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false);
+                mv.visitVarInsn(ILOAD, modifyValueIndex + parameterIndexOffset)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false)
                 mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
             }
             Type.SHORT -> {
-                mv.visitVarInsn(ILOAD, modifyValueIndex)
-                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
+                mv.visitVarInsn(ILOAD, modifyValueIndex + parameterIndexOffset)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false)
                 mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
             }
             Type.INT -> {
-                mv.visitVarInsn(ILOAD, modifyValueIndex)
-                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+                mv.visitVarInsn(ILOAD, modifyValueIndex + parameterIndexOffset)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false)
                 mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
             }
             Type.FLOAT -> {
-                mv.visitVarInsn(FLOAD, modifyValueIndex)
-                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
+                mv.visitVarInsn(FLOAD, modifyValueIndex + parameterIndexOffset)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false)
                 mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
 
             }
             Type.LONG -> {
-                mv.visitVarInsn(LLOAD, modifyValueIndex)
-                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+                mv.visitVarInsn(LLOAD, modifyValueIndex + parameterIndexOffset)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false)
                 mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+                parameterIndexOffset++
             }
             Type.DOUBLE -> {
-                mv.visitVarInsn(DLOAD, modifyValueIndex)
-                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+                mv.visitVarInsn(DLOAD, modifyValueIndex + parameterIndexOffset)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false)
                 mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
-
+                parameterIndexOffset++
             }
             Type.BOOLEAN -> {
-                mv.visitVarInsn(ILOAD, modifyValueIndex)
-                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
+                mv.visitVarInsn(ILOAD, modifyValueIndex + parameterIndexOffset)
+                mv.visitMethodInsn(INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false)
                 mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
-
             }
             Type.OBJECT -> {
-                mv.visitVarInsn(ILOAD, modifyValueIndex)
+                mv.visitVarInsn(ILOAD, modifyValueIndex + parameterIndexOffset)
                 mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
             }
             else -> {
-                mv.visitVarInsn(ILOAD, modifyValueIndex)
+                mv.visitVarInsn(ILOAD, modifyValueIndex + parameterIndexOffset)
                 mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
             }
         }
@@ -463,11 +447,28 @@ class TrackLogMethodVisitor(
         }
     }
 
-    // 处理只占一个slot的返回值 (int char short byte 引用类型)
-    private fun handleOneSlotReturnType() {
-//        mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
-//        mv.visitVarInsn(ALOAD, attributesIndex)
-//        mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
+    // 处理IReturn的返回值 (int char short byte boolean)
+    private fun handleIntReturnType() {
+        mv.visitInsn(DUP)
+        mv.visitVarInsn(ALOAD, if (isReturnShared) sharedAttributesIndex else attributesIndex)
+        mv.visitInsn(SWAP)
+        mv.visitLdcInsn(returnKey)
+        mv.visitInsn(SWAP)
+        when (methodDesc.last().toString()) {
+            "C" -> mv.visitMethodInsn(INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false)
+            "I" -> mv.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false)
+            "B" -> mv.visitMethodInsn(INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false)
+            "S" -> mv.visitMethodInsn(INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false)
+            "Z" -> mv.visitMethodInsn(INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false)
+
+        }
+        mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+        mv.visitInsn(POP)
+    }
+
+    // 处理AReturn的返回值 引用类型
+    private fun handleAReturnType() {
+
         val valueIndex = newLocal(Type.INT_TYPE)
         mv.visitInsn(DUP)
         mv.visitVarInsn(ASTORE, valueIndex)
@@ -475,11 +476,29 @@ class TrackLogMethodVisitor(
         mv.visitLdcInsn(returnKey)
         mv.visitVarInsn(ASTORE, keyIndex)
 
-        mv.visitVarInsn(ALOAD, attributesIndex)
+        mv.visitVarInsn(ALOAD, if (isReturnShared) sharedAttributesIndex else attributesIndex)
         mv.visitVarInsn(ALOAD, keyIndex)
         mv.visitVarInsn(ALOAD, valueIndex)
         mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
         mv.visitVarInsn(ALOAD, valueIndex)
+    }
+
+    // 处理FReturn的返回值 float
+    private fun handleFloatReturnType() {
+
+        val valueIndex = newLocal(Type.FLOAT_TYPE)
+        mv.visitInsn(DUP)
+        mv.visitVarInsn(FSTORE, valueIndex)
+        val keyIndex = newLocal(Type.INT_TYPE)
+        mv.visitLdcInsn(returnKey)
+        mv.visitVarInsn(ASTORE, keyIndex)
+
+        mv.visitVarInsn(ALOAD, if (isReturnShared) sharedAttributesIndex else attributesIndex)
+        mv.visitVarInsn(ALOAD, keyIndex)
+        mv.visitVarInsn(FLOAD, valueIndex)
+        mv.visitMethodInsn(INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false)
+        mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
+        mv.visitVarInsn(FLOAD, valueIndex)
     }
 
     // 处理Long类型的返回值
@@ -491,10 +510,10 @@ class TrackLogMethodVisitor(
         mv.visitLdcInsn(returnKey)
         mv.visitVarInsn(ASTORE, keyIndex)
 
-        mv.visitVarInsn(ALOAD, attributesIndex)
+        mv.visitVarInsn(ALOAD, if (isReturnShared) sharedAttributesIndex else attributesIndex)
         mv.visitVarInsn(ALOAD, keyIndex)
         mv.visitVarInsn(LLOAD, valueIndex)
-        mv.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+        mv.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false)
         mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
         mv.visitVarInsn(LLOAD, valueIndex)
     }
@@ -508,10 +527,10 @@ class TrackLogMethodVisitor(
         mv.visitLdcInsn(returnKey)
         mv.visitVarInsn(ASTORE, keyIndex)
 
-        mv.visitVarInsn(ALOAD, attributesIndex)
+        mv.visitVarInsn(ALOAD, if (isReturnShared) sharedAttributesIndex else attributesIndex)
         mv.visitVarInsn(ALOAD, keyIndex)
         mv.visitVarInsn(DLOAD, valueIndex)
-        mv.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+        mv.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false)
         mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true)
         mv.visitVarInsn(DLOAD, valueIndex)
     }
